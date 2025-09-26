@@ -1,159 +1,100 @@
 # cli.py
 """
-CLI do lfsmgr — gerenciador minimalista de builds a partir de source.
-Comandos: build, list, resolve (alias: res), remove (alias: rm).
+Interface de linha de comando do lfsmgr.
+Comandos principais:
+  build <meta.json>      → instala pacote (com dependências recursivas)
+  list                   → lista pacotes instalados
+  remove <nome>          → remove pacote instalado
 """
 
 import argparse
 import json
 from pathlib import Path
+
+import downloader
+import registry
+from deps import resolve_recursive
 from logger_ import get_logger
-from downloader import prepare_and_build
-from registry import register_package, list_installed, unregister_package, get_package
-from deps import resolve_from_file
 
-logger = get_logger("lfsmgr")
+logger = get_logger("cli")
 
 
-def cmd_build(args):
-    meta_path = Path(args.meta)
-    if not meta_path.exists():
-        logger.error("Arquivo de metadados não encontrado: %s", meta_path)
-        return
-    meta = json.loads(meta_path.read_text(encoding="utf-8"))
-    try:
-        info = prepare_and_build(meta)
-        # prepare_and_build deve retornar dict com keys: name, version, installed_files (lista relativa ao PREFIX)
-        installed_files = info.get("installed_files", [])
-        register_package(
-            info["name"],
-            info["version"],
-            meta,
-            installed_files=installed_files,
-            log_path=logger.log_path,
-        )
-        logger.info("Pacote %s ver %s construído e registrado", info["name"], info["version"])
-    except Exception as e:
-        logger.error("Erro no build: %s", e)
+def load_meta(path: str) -> dict:
+    """Carrega metadados JSON de um arquivo."""
+    p = Path(path)
+    if not p.exists():
+        raise FileNotFoundError(f"Arquivo {path} não encontrado")
+    return json.loads(p.read_text(encoding="utf-8"))
 
 
-def cmd_list(args):
-    installed = list_installed()
-    if not installed:
-        print("Nenhum pacote instalado registrado.")
-        return
-    for name, data in installed.items():
-        print(f"- {name} {data.get('version')} (instalado em {data.get('installed_at')})")
+def cmd_build(meta_path: str):
+    """Instala pacote a partir de um arquivo de metadados + dependências."""
+    meta = load_meta(meta_path)
+    name = meta["name"]
 
-
-def cmd_resolve(args):
-    meta_path = Path(args.meta)
-    if not meta_path.exists():
-        logger.error("Arquivo de metadados não encontrado: %s", meta_path)
-        return
+    # carregar metadados adicionais (pasta ./metas)
+    all_metas = {name: meta}
     metas_dir = Path("metas")
-    if not metas_dir.exists():
-        logger.error("Diretório 'metas/' não encontrado.")
-        return
-    try:
-        order = resolve_from_file(meta_path, metas_dir)
-        print("Ordem de build (dependências resolvidas):")
-        for p in order:
-            print(" -", p)
-    except Exception as e:
-        logger.error("Erro ao resolver dependências: %s", e)
-
-
-def cmd_remove(args):
-    name = args.name
-    pkg = get_package(name)
-    if not pkg:
-        logger.error("Pacote %s não encontrado no registro.", name)
-        return
-
-    files = pkg.get("installed_files", [])
-    if not files:
-        logger.warning("Pacote %s não tinha arquivos registrados.", name)
-    else:
-        # import PREFIX aqui para evitar problemas de import circular
-        try:
-            from downloader import PREFIX
-        except Exception as e:
-            logger.error("Erro ao importar PREFIX do downloader: %s", e)
-            return
-
-        removed = 0
-        for rel in files:
-            relp = Path(rel)
-            if relp.is_absolute():
-                # segurança: pulamos entradas absolutas (esperamos caminhos relativos ao PREFIX)
-                logger.warning("Pulando caminho absoluto não gerenciado: %s", relp)
-                continue
-            fpath = PREFIX / relp
-            if not fpath.exists():
-                logger.debug("Arquivo não existe (pulando): %s", fpath)
-                continue
+    if metas_dir.exists():
+        for f in metas_dir.glob("*.json"):
             try:
-                if fpath.is_file() or fpath.is_symlink():
-                    fpath.unlink()
-                    removed += 1
-                elif fpath.is_dir():
-                    # tenta remover diretório caso esteja vazio
-                    try:
-                        fpath.rmdir()
-                        removed += 1
-                    except OSError:
-                        logger.debug("Diretório não vazio (pulando): %s", fpath)
+                m = json.loads(f.read_text(encoding="utf-8"))
+                all_metas[m["name"]] = m
             except Exception as e:
-                logger.error("Falha ao remover %s: %s", fpath, e)
+                logger.warning("Falha ao carregar %s: %s", f, e)
 
-        # tentar limpar diretórios pai (somente dentro do PREFIX)
-        parent_dirs = sorted(
-            { (PREFIX / Path(rel)).parent for rel in files if not Path(rel).is_absolute() },
-            reverse=True
-        )
-        for d in parent_dirs:
-            try:
-                d.rmdir()
-            except Exception:
-                # ignora se não vazio ou outra falha
-                pass
+    # resolver ordem de instalação (dependências recursivas)
+    order = resolve_recursive(all_metas, name)
 
-        logger.info("Removidos %d arquivos do pacote %s", removed, name)
+    for pkg in order:
+        logger.info(">>> Instalando %s...", pkg)
+        downloader.build_package(all_metas[pkg])
 
-    # por fim, remove do registro
-    unregister_package(name)
-    logger.info("Pacote %s removido do registro.", name)
+
+def cmd_list():
+    """Lista pacotes instalados."""
+    installed = registry.list_installed()
+    if not installed:
+        print("Nenhum pacote instalado ainda.")
+        return
+    for name, info in installed.items():
+        print(f"{name} {info['version']} (instalado em {info['installed_at']})")
+
+
+def cmd_remove(name: str):
+    """Remove pacote do sistema."""
+    pkg = registry.get_package(name)
+    if not pkg:
+        print(f"Pacote {name} não está instalado.")
+        return
+    downloader.remove_package(pkg)
+    registry.unregister_package(name)
+    print(f"Pacote {name} removido.")
 
 
 def main():
-    p = argparse.ArgumentParser(prog="lfsmgr")
-    sub = p.add_subparsers(dest="cmd")
+    parser = argparse.ArgumentParser(prog="lfsmgr", description="Gerenciador de pacotes LFS minimalista")
+    sub = parser.add_subparsers(dest="cmd", required=True)
 
     # build
-    b = sub.add_parser("build", help="baixar+compilar+instalar a partir de arquivo de metadados")
-    b.add_argument("meta", help="arquivo JSON de metadados")
-    b.set_defaults(func=cmd_build)
+    p_build = sub.add_parser("build", help="instala pacote a partir de metadados")
+    p_build.add_argument("meta", help="arquivo JSON com metadados do pacote")
 
     # list
-    l = sub.add_parser("list", help="listar pacotes registrados")
-    l.set_defaults(func=cmd_list)
+    sub.add_parser("list", help="lista pacotes instalados")
 
-    # resolve (alias: res)
-    r = sub.add_parser("resolve", aliases=["res"], help="resolver dependências recursivas")
-    r.add_argument("meta", help="arquivo JSON inicial")
-    r.set_defaults(func=cmd_resolve)
+    # remove
+    p_rm = sub.add_parser("remove", help="remove pacote instalado")
+    p_rm.add_argument("name", help="nome do pacote a remover")
 
-    # remove (alias: rm)
-    rm = sub.add_parser("remove", aliases=["rm"], help="remover pacote do registro (e arquivos)")
-    rm.add_argument("name", help="nome do pacote a remover")
-    rm.set_defaults(func=cmd_remove)
+    args = parser.parse_args()
 
-    args = p.parse_args()
-    if hasattr(args, "func"):
-        args.func(args)
-    else:
-        p.print_help()
+    if args.cmd == "build":
+        cmd_build(args.meta)
+    elif args.cmd == "list":
+        cmd_list()
+    elif args.cmd == "remove":
+        cmd_remove(args.name)
 
 
 if __name__ == "__main__":
