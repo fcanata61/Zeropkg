@@ -6,11 +6,14 @@ from pathlib import Path
 import tarfile
 import zipfile
 import urllib.request
-from typing import Optional
+from typing import Optional, List
 from logger_ import get_logger
 
 WORKDIR = Path.cwd() / "build"
 WORKDIR.mkdir(parents=True, exist_ok=True)
+
+PREFIX = Path.home() / ".lfsmgr" / "prefix"
+PREFIX.mkdir(parents=True, exist_ok=True)
 
 logger = get_logger("downloader")
 
@@ -46,7 +49,6 @@ def extract_archive(archive: Path, dest_dir: Path) -> Path:
     if tarfile.is_tarfile(archive):
         with tarfile.open(archive, "r:*") as tf:
             tf.extractall(dest_dir)
-        # guess top-level dir
         members = [m for m in dest_dir.iterdir()]
         if len(members) == 1 and members[0].is_dir():
             return members[0]
@@ -66,7 +68,6 @@ def apply_patch(src_dir: Path, patch_file: Path) -> bool:
     if not patch_file.exists():
         logger.error("Patch não encontrado")
         return False
-    # usa o utilitário patch do sistema
     proc = subprocess.run(["patch", "-p1", "-i", str(patch_file)], cwd=src_dir, capture_output=True, text=True)
     logger.debug(proc.stdout)
     if proc.returncode != 0:
@@ -74,17 +75,25 @@ def apply_patch(src_dir: Path, patch_file: Path) -> bool:
         return False
     return True
 
-def run_steps(src_dir: Path, steps: list) -> bool:
+def run_steps(src_dir: Path, steps: list, env=None) -> bool:
     for step in steps:
         logger.info(f"Executando: {step}")
-        proc = subprocess.run(step, shell=True, cwd=src_dir)
+        proc = subprocess.run(step, shell=True, cwd=src_dir, env=env)
         if proc.returncode != 0:
             logger.error(f"Comando falhou: {step} (rc={proc.returncode})")
             return False
     return True
 
+def collect_files(destdir: Path) -> List[str]:
+    """Lista todos os arquivos instalados em destdir relativo ao PREFIX."""
+    files = []
+    for path in destdir.rglob("*"):
+        if path.is_file():
+            rel = path.relative_to(PREFIX)
+            files.append(str(rel))
+    return files
+
 def prepare_and_build(meta: dict) -> dict:
-    # meta: expected shape shown no manifesto do projeto
     name = meta.get("name")
     version = meta.get("version", "0")
     src = meta["source"]["url"]
@@ -96,7 +105,6 @@ def prepare_and_build(meta: dict) -> dict:
     if not verify_checksum(archive, sha):
         raise RuntimeError("Checksum inválido")
     src_root = extract_archive(archive, pkgdir / "src")
-    # apply patches if any
     patches = meta.get("patches", [])
     for p in patches:
         ppath = Path(p)
@@ -105,18 +113,23 @@ def prepare_and_build(meta: dict) -> dict:
         ok = apply_patch(src_root, ppath)
         if not ok:
             raise RuntimeError(f"Falha ao aplicar patch {p}")
-    # run build steps
+
     build = meta.get("build", {})
     configure = build.get("configure", [])
     build_steps = build.get("build", [])
     install_steps = build.get("install", [])
+
+    env = {"DESTDIR": str(PREFIX), **dict(**os.environ)}
+
     if configure:
-        if not run_steps(src_root, configure):
+        if not run_steps(src_root, configure, env=env):
             raise RuntimeError("Falha no configure")
     if build_steps:
-        if not run_steps(src_root, build_steps):
+        if not run_steps(src_root, build_steps, env=env):
             raise RuntimeError("Falha no build")
     if install_steps:
-        if not run_steps(src_root, install_steps):
+        if not run_steps(src_root, install_steps, env=env):
             raise RuntimeError("Falha no install")
-    return {"name": name, "version": version, "src_root": str(src_root)}
+
+    installed_files = collect_files(PREFIX)
+    return {"name": name, "version": version, "src_root": str(src_root), "installed_files": installed_files}
