@@ -1,50 +1,73 @@
 # deps.py
-import json
-from pathlib import Path
+"""
+Resolução de dependências recursivas do lfsmgr.
+Cada pacote pode ter um campo "depends" em seu arquivo de metadados (lista de nomes).
+Exemplo:
+{
+  "name": "nano",
+  "version": "7.2",
+  "source": {...},
+  "build": {...},
+  "depends": ["ncurses", "gettext"]
+}
+"""
+
 from typing import Dict, List, Set
+from registry import list_installed
+from logger_ import get_logger
 
-class DependencyError(Exception):
-    pass
+logger = get_logger("deps")
 
-def load_meta(pkgname: str, metas_dir: Path) -> dict:
-    """Carrega arquivo JSON de metadados para um pacote."""
-    path = metas_dir / f"{pkgname}.json"
-    if not path.exists():
-        raise DependencyError(f"Metadados não encontrados para {pkgname} em {path}")
-    return json.loads(path.read_text(encoding="utf-8"))
 
-def resolve_deps(pkgmeta: dict, metas_dir: Path, seen: Set[str]=None, stack: Set[str]=None) -> List[str]:
+def resolve_dependencies(meta: Dict) -> List[str]:
     """
-    Resolve dependências recursivamente e retorna ordem de build.
-    Usa DFS + detecção de ciclos.
+    Recebe metadados de um pacote e retorna a lista de dependências faltantes
+    (que ainda não estão instaladas).
     """
-    if seen is None:
-        seen = set()
-    if stack is None:
-        stack = set()
+    installed = list_installed()
+    deps = meta.get("depends", [])
 
-    order: List[str] = []
+    missing = [d for d in deps if d not in installed]
+    if missing:
+        logger.info("Dependências faltando: %s", ", ".join(missing))
+    else:
+        logger.info("Todas as dependências já estão satisfeitas.")
 
-    name = pkgmeta["name"]
-    if name in stack:
-        raise DependencyError(f"Ciclo detectado em dependências: {name}")
-    if name in seen:
-        return []
+    return missing
 
-    stack.add(name)
-    deps = pkgmeta.get("depends", [])
-    for dep in deps:
-        depname = dep.split(">=")[0].strip()  # simplificação: ignora versão
-        depmeta = load_meta(depname, metas_dir)
-        order += resolve_deps(depmeta, metas_dir, seen, stack)
 
-    stack.remove(name)
-    if name not in seen:
-        seen.add(name)
-        order.append(name)
-    return order
+def resolve_recursive(all_metas: Dict[str, Dict], target: str) -> List[str]:
+    """
+    Resolve dependências de forma recursiva.
+    all_metas: dicionário {nome: metadados}
+    target: nome do pacote a instalar
 
-def resolve_from_file(meta_file: Path, metas_dir: Path) -> List[str]:
-    """Resolve dependências a partir de um arquivo JSON inicial."""
-    pkgmeta = json.loads(meta_file.read_text(encoding="utf-8"))
-    return resolve_deps(pkgmeta, metas_dir)
+    Retorna lista ordenada de pacotes que precisam ser instalados,
+    sem duplicatas e já na ordem correta.
+    """
+    resolved: List[str] = []
+    visited: Set[str] = set()
+
+    def dfs(pkg: str):
+        if pkg in visited:
+            return
+        visited.add(pkg)
+
+        meta = all_metas.get(pkg)
+        if not meta:
+            logger.error("Metadados do pacote %s não encontrados!", pkg)
+            return
+
+        for dep in meta.get("depends", []):
+            dfs(dep)
+
+        resolved.append(pkg)
+
+    dfs(target)
+
+    # Remove os já instalados
+    installed = list_installed()
+    final_list = [p for p in resolved if p not in installed]
+
+    logger.info("Ordem de instalação calculada: %s", " → ".join(final_list))
+    return final_list
