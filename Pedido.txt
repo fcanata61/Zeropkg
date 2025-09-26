@@ -1,0 +1,31 @@
+Olá ChatGPT,
+
+Quero que você gere um gerenciador de pacotes source-based para Linux chamado `zeropkg`, escrito em Python 3, usando todos os detalhes do arquivo `zeropkg_full_manager.txt` que vou fornecer abaixo.
+
+Regras importantes:
+
+1. Código completo e funcional; não entregue esqueleto ou pseudocódigo.
+2. Todos os módulos devem ser integrados: CLI, download, extração, patches, sandbox, build, instalação, logs coloridos, dependências, toolchains, auditoria, notificações.
+3. CLI com abreviações, dry-run, --ask/-a, tail em tempo real, animado e colorido.
+4. Uso de sandbox + fakeroot para instalação temporária antes de mover para /usr.
+5. Todos os logs e registros de arquivos instalados devem ser salvos e acessíveis.
+6. O arquivo de configuração externo /etc/zeropkg/config.yaml deve ser usado por todos os módulos.
+7. Suporte a múltiplas linguagens (Autotools, Rust/Cargo, Python, Go, Java) e opção custom.
+8. Resolução de dependências topológica, reversa e por camadas profundas, incluindo updates automáticos via HTTP/HTTPS/Git/Rsync/FTP.
+9. Inclua exemplo de meta.yaml para testar build, instalação, remoção e update.
+10. Múltiplos downloads e patches por camada devem ser suportados.
+11. Logs coloridos, históricos, visualização em tempo real, e notificação via notify-send sobre updates.
+12. Suporte a múltiplas versões coexistindo e gerenciamento completo de toolchains.
+13. Limpeza completa de sandbox, build, logs e prefix disponível via comando clean.
+14. Todo passo deve ser registrado, versionado e logado.
+15. Se o código for muito grande, divida em módulos funcionais, mas forneça todos os módulos completos prontos para salvar e rodar.
+
+Objetivo: Quero poder rodar o gerenciador completo só copiando os arquivos, configurando o YAML de exemplo e executando no Linux sem precisar de ajustes adicionais.
+
+Arquivo de referência:
+
+```
+[cole aqui o conteúdo completo do zeropkg_full_manager.txt]
+```
+
+Por favor, gere o código Python completo, incluindo todos os módulos, CLI, funções de build, sandbox, download, extração, patches, logs coloridos, hooks, resolução de dependências, atualização automática, notificação, dry-run, --ask/-a, limpeza e suporte a múltiplas linguagens e toolchains.
