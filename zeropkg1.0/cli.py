@@ -5,6 +5,7 @@ Comandos principais:
   build <meta.json>      → instala pacote (com dependências recursivas)
   list                   → lista pacotes instalados
   remove <nome>          → remove pacote instalado
+  update <nome>          → atualiza pacote já instalado
 """
 
 import argparse
@@ -72,6 +73,30 @@ def cmd_remove(name: str):
     print(f"Pacote {name} removido.")
 
 
+def cmd_update(name: str):
+    """Atualiza um pacote já instalado para a versão do metadado local."""
+    pkg = registry.get_package(name)
+    if not pkg:
+        print(f"Pacote {name} não está instalado.")
+        return
+
+    meta_file = Path("metas") / f"{name}.json"
+    if not meta_file.exists():
+        print(f"Metadado metas/{name}.json não encontrado.")
+        return
+
+    new_meta = json.loads(meta_file.read_text(encoding="utf-8"))
+    old_version = pkg["version"]
+    new_version = new_meta["version"]
+
+    if new_version == old_version:
+        print(f"{name} já está na versão {new_version}.")
+        return
+
+    print(f"Atualizando {name}: {old_version} → {new_version}")
+    downloader.build_package(new_meta)
+
+
 def main():
     parser = argparse.ArgumentParser(prog="lfsmgr", description="Gerenciador de pacotes LFS minimalista")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -87,6 +112,10 @@ def main():
     p_rm = sub.add_parser("remove", help="remove pacote instalado")
     p_rm.add_argument("name", help="nome do pacote a remover")
 
+    # update
+    p_up = sub.add_parser("update", help="atualiza um pacote já instalado para a versão mais recente do metadado")
+    p_up.add_argument("name", help="nome do pacote a atualizar")
+
     args = parser.parse_args()
 
     if args.cmd == "build":
@@ -95,6 +124,8 @@ def main():
         cmd_list()
     elif args.cmd == "remove":
         cmd_remove(args.name)
+    elif args.cmd == "update":
+        cmd_update(args.name)
 
 
 if __name__ == "__main__":
