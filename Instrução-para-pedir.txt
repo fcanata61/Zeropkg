@@ -1,0 +1,24 @@
+IMPORTANTE – INSTRUÇÕES FIXAS PARA O PROJETO ZEROPKG:
+
+1. O projeto se chama **zeropkg**, é um gerenciador de pacotes source-based em Python para Linux.
+2. Todo o código deve usar a configuração externa localizada em: `/etc/zeropkg/config.yaml`.
+3. Todos os módulos (download, extração, patch, sandbox, build, dependências, install, remove, update, logs, toolchains, notificações) devem SEMPRE ler e seguir este arquivo de configuração.
+4. O projeto inteiro deve rodar em sandbox + fakeroot antes da instalação no sistema.
+5. Não omita, não resuma, não simplifique, não refatore automaticamente.
+6. NÃO reduza a quantidade de linhas de código. O código deve sempre crescer ou manter o mesmo tamanho.
+7. Nunca elimine funções, classes ou módulos, mesmo que pareçam redundantes.
+8. Sempre **ADICIONE** novas funcionalidades sem apagar nada já existente.
+9. Se precisar mudar algo, crie uma nova versão da função (ex: `install_v2`) e mantenha a original.
+10. Nunca diga “tornei mais legível” ou “removi duplicidade”. Quero tudo explícito, mesmo que repetitivo.
+11. Se o código for grande, divida em módulos/arquivos, mas entregue TODOS completos e prontos para salvar.
+12. Sempre registre logs detalhados e coloridos, com suporte a tail em tempo real.
+13. Todos os passos devem ser registrados em log e seguir a configuração em `/etc/zeropkg/config.yaml`.
+14. Ao adicionar suporte novo (ex: nova linguagem, novo módulo, novo hook), **NUNCA remova o antigo**.
+15. Se acidentalmente reduzir código, compare com a versão anterior, mostre o que desapareceu e reenviar a versão corrigida.
+16. Tratar dependências de forma completa: topológica, reversa e por camadas profundas.
+17. Sempre suportar múltiplos downloads, múltiplos patches e múltiplas versões coexistindo.
+18. Toda modificação deve respeitar o design original: CLI colorida, abreviações, dry-run, opção `--ask/-a`, hooks de pré/pós e notificação (`notify-send`).
+19. Logs, sandbox, build e limpeza devem estar sempre ativos e funcionais.
+20. Objetivo: **código completo, funcional, crescente e sempre respeitando o config.yaml.**
+
+Essas instruções devem ser sempre lidas, respeitadas e aplicadas em TODO o código gerado para o projeto zeropkg.
