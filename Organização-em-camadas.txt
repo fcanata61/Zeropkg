@@ -1,0 +1,151 @@
+=========================================================
+ Zeropkg - Estrutura de Organização e Gerenciamento
+=========================================================
+
+Este documento descreve como organizar os programas no Zeropkg em camadas
+(core, system, desktop, user), utilizando manifests em arquivos `.list`,
+com exemplos práticos, recomendações e comparativos com outras distros.
+
+---------------------------------------------------------
+1. Camadas do Sistema
+---------------------------------------------------------
+
+1.1 Camada Base (core)
+- Essencial para compilar qualquer outro programa.
+- Deve ser estável, raramente atualizado.
+- Inclui:
+  - Toolchain: binutils, gcc, llvm/clang, glibc, linux-headers
+  - Ferramentas básicas: bash, coreutils, findutils, sed, awk, grep, make, cmake, python-minimal
+
+1.2 Camada Sistema (system)
+- Programas fundamentais para rodar o sistema em modo servidor ou workstation mínima.
+- Inclui:
+  - util-linux, shadow, e2fsprogs, iproute2, openssh, sudo, pkg-config
+
+1.3 Camada Desktop/Usuário (desktop)
+- Programas gráficos e ambientes de desktop.
+- Inclui:
+  - Xorg, Wayland, KDE, GNOME, Firefox, LibreOffice, VLC, GIMP
+
+1.4 Repositório de Usuário (user)
+- Diretório: /usr/ports/zeropkg/user/
+- Para pacotes experimentais, versões alternativas ou customizações pessoais.
+- Exemplos:
+  - /usr/ports/zeropkg/user/neovim-git/
+  - /usr/ports/zeropkg/user/firefox-beta/
+
+---------------------------------------------------------
+2. Arquivos Centrais de Manifestos
+---------------------------------------------------------
+
+Os manifests são arquivos de texto que listam pacotes a serem tratados em grupo.
+Eles devem ser armazenados em /usr/ports/zeropkg/.
+
+2.1 Conteúdo de core.list
+binutils
+gcc
+glibc
+linux-headers
+bash
+coreutils
+sed
+grep
+awk
+make
+
+2.2 Conteúdo de system.list
+util-linux
+shadow
+iproute2
+openssh
+e2fsprogs
+pkg-config
+
+2.3 Conteúdo de desktop.list
+xorg-server
+mesa
+gnome
+firefox
+libreoffice
+vlc
+
+---------------------------------------------------------
+3. Atualizações Diferenciadas
+---------------------------------------------------------
+
+- Core:
+  Atualizado somente em major releases (ex.: gcc 14, glibc 2.40).
+- System:
+  Atualizado mensalmente.
+- Desktop/User:
+  Atualizado conforme necessidade (até semanal).
+
+---------------------------------------------------------
+4. Exemplos de Comandos Zeropkg
+---------------------------------------------------------
+
+zeropkg install --core        # Instala/recompila somente o core
+zeropkg install --system      # Instala todos os pacotes de system.list
+zeropkg install --desktop     # Instala pacotes de desktop.list
+zeropkg install firefox       # Instala programa individual
+
+---------------------------------------------------------
+5. Comparativo com Outras Distros
+---------------------------------------------------------
+
+- Gentoo:
+  Separa @system (core) e @world (resto).
+- NixOS:
+  Separa stdenv (toolchain) do restante.
+- Arch:
+  Não tem separação clara → updates do core podem quebrar tudo.
+- Guix:
+  Mantém "bootstrap binaries" isolados.
+
+---------------------------------------------------------
+6. Recomendações para Zeropkg
+---------------------------------------------------------
+
+- Manter o Core estável, quase intocável, validado com sandbox.
+- Organizar System e Desktop com manifests (*.list).
+- Permitir que o usuário adicione pacotes em /usr/ports/zeropkg/user/.
+
+---------------------------------------------------------
+7. Exemplo de meta.yaml (pacote simples - bash)
+---------------------------------------------------------
+
+package:
+  name: bash
+  version: 5.2
+  source:
+    url: https://ftp.gnu.org/gnu/bash/bash-5.2.tar.gz
+    sha256: <hash>
+  build:
+    system: autotools
+    steps:
+      - ./configure --prefix=/usr
+      - make
+      - make DESTDIR=$WORKDIR/fakeroot install
+  dependencies:
+    build:
+      - gcc
+      - make
+    run:
+      - glibc
+  install:
+    prefix: /usr
+  hooks:
+    post-install:
+      - echo "Bash instalado com sucesso"
+
+---------------------------------------------------------
+8. Conclusão
+---------------------------------------------------------
+
+Essa abordagem mantém separação clara entre:
+- Core (base de compilação e toolchain)
+- System (programas fundamentais)
+- Desktop (ambientes gráficos e apps grandes)
+- User (customizações e experimentos)
+
+Evita confusão, facilita manutenção, atualizações, correções e garante estabilidade.
