@@ -1,0 +1,4 @@
+# Carrega ambiente LFS automaticamente se estiver no diretório LFS
+if [[ $PWD == /mnt/lfs* ]]; then
+    source /mnt/lfs/env-lfs.sh
+fi
