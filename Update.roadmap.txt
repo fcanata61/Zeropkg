@@ -1,0 +1,177 @@
+Zeropkg — Instruções para criar o módulo `update`
+
+Objetivo
+
+Criar um módulo `update` para o gerenciador Zeropkg que:
+
+* Verifique upstreams (HTTP/HTTPS, Git, rsync, FTP) para novas versões de todos os programas do repositório `/usr/ports/zeropkg/`.
+* Classifique updates por severidade (crítico, urgente, normal) usando regras configuráveis.
+* Notifique o usuário via `notify-send` quando houver updates, com resumo legível.
+* Gere um arquivo legível pela barra de status com os números de updates (ex.: "12 críticos 3 urgentes 30 normais").
+* Gere um arquivo detalhado (JSON/YAML/CSV) contendo todas as atualizações encontradas (nome, versão instalada, versão upstream, canal, URL, checksum, gravidade, data, ações sugeridas).
+* Copie automaticamente novos `meta.yaml` (ou `meta.meta.yaml`) para as respectivas pastas de pacote no repositorio local, criando subdiretórios quando necessário.
+* Respeite o arquivo de configuração `/etc/zeropkg/config.yaml` para diretórios, políticas e thresholds.
+* Ofereça `--dry-run` e `--ask/-a` para confirmar ações antes de alterar o repositório.
+* Logue todas as ações (detalhes, erros, decisões) em arquivos separados e suportar visualização `tail -f` colorida.
+
+Especificações detalhadas
+
+1. Arquitetura e integração
+
+* O módulo `update` deve ser implementado como parte do pacote `zeropkg` (p.ex. `zeropkg.update`), e expor:
+
+  * Função programática `check_all_upstreams(config, repo_dir) -> UpdateReport`.
+  * CLI `zeropkg update [--all|<pkgname>] [--dry-run] [--ask|-a] [--notify|-n]`.
+* Deve reutilizar os utilitários existentes: leitura do `config.yaml` (zeropkg.config), logging (zeropkg.logger), manipulação de metas (zeropkg.repository / parser de meta.yaml), e o solver de dependências.
+
+2. Leitura de configuração
+
+* Sempre ler `/etc/zeropkg/config.yaml` (ou arquivo de config fornecido via `--config`), com chaves relevantes:
+
+  * `repo_dir` (default `/usr/ports/zeropkg`)
+  * `cache_dir` (onde baixar temporariamente)
+  * `update_notify` (bool)
+  * `update_thresholds` (regras de severidade, ex.: outdated days, CVE matches)
+  * `upstream_timeout` / `rate_limit`
+  * `barfile_path` (caminho do arquivo para a barra de status)
+  * `meta_copy_policy` (auto|manual|ask)
+  * `signature_check` (gpg: true/false)
+
+3. Descoberta de pacotes e metadados
+
+* Percorrer `repo_dir` recursivamente e localizar todos os `meta.yaml` (ou extensão escolhida).
+* Para cada meta, extrair campos importantes: `name`, `version`, `source` (pode ser lista com url/type), `checksum`/`sha256`, `upstream` (se existir), `meta_repo` e `category`.
+* Carregar o estado instalado a partir do DB local (`/var/lib/zeropkg/db` ou similar) para comparar versão instalada.
+
+4. Verificação upstream (mecanismos)
+
+* Suportar múltiplos métodos dependendo da entrada `source` no meta.yaml:
+  a) HTTP/HTTPS: consultar a URL ou uma API de releases (ex: GitHub releases, project pages). Implementar heurística:
+
+  * Se `source` aponta para um tarball com versão no nome, calcular a versão a partir do nome do arquivo.
+  * Se `source` aponta para um repositório (p.ex. URL terminando com `.git` ou GitHub), usar Git to query tags/refs (via `git ls-remote` ou GitHub API).
+    b) Git: `git ls-remote --tags <repo>` e parse de tags sem clonar; priorizar tags sem pré-releases.
+    c) Rsync/FTP: subir listagem e detectar arquivos mais recentes por nome/timestamp.
+    d) Multi-source: tentar cada fonte na ordem até achar um candidato novo.
+* Para cada método, aplicar `timeout` e `rate_limit` e registrar eventuais falhas (erro de rede, 404, throttling).
+
+5. Detectar e comparar versões
+
+* Implementar parser de versões robusto (semântico quando possível), permitindo comparar `1.2.10` > `1.2.9`, lidar com `rc`, `beta`, `alpha` e com nomes como `2.12`.
+* Se não for possível parsear versões, usar heurísticas por timestamp do arquivo ou checksum diferente.
+* Reportar sempre: versão_instalada, versão_upstream, método_detectado.
+
+6. Checagens adicionais antes de indicar update
+
+* Verificar checksum upstream (sha256) se disponível.
+* Verificar assinatura GPG se `signature_check` ativado; registrar resultado.
+* Se `update_thresholds` define dias mínimos para considerar update, respeitar.
+* Checar CVE feeds (opcional): mapear pacote para CVEs relevantes; se CVE crítico relacionado, marcar como crítico.
+
+7. Classificação de severidade (política configurável)
+
+* Sugestão default de regras (configurável em `config.yaml`):
+
+  * `critical`: CVE com CVSS >= 9.0 ou atualização que corrige vulnerabilidade crítica; ou mudança de ABI incompatível detectada; ou pacote com versão de segurança urgente.
+  * `urgent`: atualização de segurança com CVSS >= 7.0 ou versão com correções importantes.
+  * `normal`: atualização de manutenção/funcionalidade menor.
+* Permitir regras por regex no nome do pacote (ex.: kernel => crítico por padrão) e por prioridade manual.
+
+8. Relatórios e arquivos de saída
+
+* Criar um `UpdateReport` interno contendo lista de `UpdateEntry` com campos:
+
+  * `name`, `category`, `installed_version`, `upstream_version`, `method`, `url`, `checksum`, `severity`, `notes`, `timestamp`.
+* Salvar relatório detalhado em `cache_dir/updates-YYYYMMDD-HHMMSS.json` (JSON) e um equivalente YAML/CSV se desejado.
+* Gerar um arquivo simples legível pela barra de status (`barfile_path`) com conteúdo em formato: `CRITICAL:12 URGENT:3 NORMAL:30` e uma linha adicional com timestamp.
+* Gerar também um arquivo `updates-summary.txt` com linhas fáceis de parse (uma linha por pacote) e um total no topo.
+
+9. Notificações (notify-send)
+
+* Se `update_notify` configurado e há updates, executar `notify-send` com um resumo curto: ex: "Zeropkg: 12 updates (3 urgent, 1 critical)".
+* O body da notificação pode apontar para o `updates-summary` ou abrir o gerenciador (se houver integração GUI).
+* Implementar fallback se `notify-send` não existir (log e gravar flag para CLI mostrar).
+
+10. Ação sobre metadados (copiar metas atualizadas)
+
+* Quando detectada uma nova versão upstream, preparar nova versão do `meta.yaml`:
+
+  * Atualizar `version` para a versão detectada.
+  * Atualizar `source` (URL), `checksum` se disponível, e `notes` com data e método.
+* Política `meta_copy_policy`:
+
+  * `auto`: copiar automaticamente o novo `meta.yaml` para a subpasta do pacote em `repo_dir/<category>/<pkg>/` (criar se não existir).
+  * `ask`: solicitar confirmação ao usuário (`--ask/-a`) antes de copiar.
+  * `manual`: apenas gerar o arquivo em `cache_dir/pending-metas/<pkg>-<version>.meta.yaml` e não copiar.
+* Ao copiar o meta, garantir permissão e propriedade apropriadas e criar backup do meta anterior (`*.meta.yaml.bak-YYYYMMDD`).
+
+11. Integração com controle de versão (opcional)
+
+* Se o repo local for um repositório Git (checar `repo_dir/.git`), oferecer opção para commitar e push das novas metas (configurável).
+* Commit padrão: "update: <pkg> <old_version> -> <new_version>" e assinar commit se `gpg` configurado.
+* Respeitar política `meta_copy_policy` antes do commit.
+
+12. Segurança e atomicidade
+
+* Não sobrescrever metas originais sem backup.
+* Operações que alteram repositório devem ser atômicas (escrever arquivo temporário e `rename`).
+* Se uma cópia/commit falhar, reverter passo e registrar error em log.
+
+13. Dry-run e confirmação
+
+* `--dry-run`: executar todo o processo de detecção e geração de relatórios, mas NÃO copiar metas, NÃO commitar, NÃO notificar (ou notificar em modo "demo"), apenas gerar arquivos em `cache_dir`.
+* `--ask/-a`: antes de copiar metas ou commitar, mostrar lista e perguntar sim/não por pacote; suporte `--yes-all`.
+
+14. Logs e observabilidade
+
+* Gerar logs separados: `updates-check.log` (detalhes), `updates-actions.log` (ações tomadas), e `updates-errors.log`.
+* Cada log line incluir timestamp ISO8601 e nível.
+* Suportar `--tail` para acompanhar em tempo real (use ANSI color codes para severidade).
+
+15. CLI e agendamento
+
+* CLI: `zeropkg update --all [--dry-run] [--ask] [--notify] [--config FILE] [--commit] [--push]`.
+* `--all` (padrão) verifica todo repo; se um `pkgname` é dado, verifica só ele e seus dependentes (opcional).
+* Permitir modo daemon/cron: `zeropkg update --daemon --interval 86400` que grava relatórios periodicamente.
+
+16. Testes e validação
+
+* Fornecer testes unitários/mocks para os métodos de verificação upstream (simular GitHub API, arquivos HTTP e rsync listings).
+* Testar edge-cases: nomes de versão estranhos, tags com prefixos `v`, releases draft, redirections HTTP.
+* Validar integridade do `meta.yaml` gerado (schema YAML) antes de copiar.
+
+17. Exemplo de fluxo (resumido)
+
+1) Ler `/etc/zeropkg/config.yaml`.
+2) Listar todos os meta.yaml em `repo_dir`.
+3) Para cada meta: checar upstream via método adequado.
+4) Se versão upstream > instalada: classificar severidade, buscar checksum/assinatura.
+5) Gerar relatório e armazenar em `cache_dir`.
+6) Se `meta_copy_policy=auto` (ou `--ask` confirmado): gerar meta atualizado e copy/commit.
+7) Atualizar `barfile_path` e rodar `notify-send` com resumo.
+8) Log detalhado em `updates-actions.log`.
+
+18. Estrutura de saída (paths)
+
+* `cache_dir/updates/YYYYMMDD-HHMMSS/updates.json`
+* `cache_dir/updates/YYYYMMDD-HHMMSS/pending-metas/` (metas gerados)
+* `logs_dir/updates-check.log`, `logs_dir/updates-actions.log`, `logs_dir/updates-errors.log`
+* `barfile_path` (configurável) com conteúdo: `CRITICAL:1 URGENT:3 NORMAL:12` e timestamp
+* `repo_dir/<category>/<pkg>/<pkg>-<version>.meta.yaml` (quando copiado)
+
+19. Boas práticas e recomendações
+
+* Rate-limit e backoff exponencial ao consultar upstream; evitar hammering.
+* Cachear respostas por pacote por um período configurável (ex.: 1h) para reduzir tráfego.
+* Fornecer opção para "force-check" (ignorar cache).
+* Registrar todas as decisões (por que um pacote foi classificado como crítico).
+* Permitir integração futura com scanners de segurança (CVE feeds).
+
+20. Entregáveis para o ChatGPT gerar
+
+* Módulo Python `zeropkg.update` com funções e CLI.
+* Exemplos de testes unitários.
+* Exemplo do `config.yaml` descrevendo chaves relativas a update.
+* README com instruções de uso e exemplos de `--dry-run` e `--ask`.
+
+Fim do documento.
