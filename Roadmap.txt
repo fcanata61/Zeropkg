@@ -1,0 +1,41 @@
+/etc/zeropkg/               → Configurações globais
+/usr/ports/zeropkg/         → Repositório de metas (meta.yaml)
+/var/zeropkg/               → Estado, banco de dados e logs
+/var/cache/zeropkg/         → Downloads e pacotes compilados
+/var/tmp/zeropkg/           → Diretório temporário de build
+/var/lib/zeropkg/           → Metadados e registros de pacotes instalados
+/opt/zeropkg/               → Sandboxes e toolchains
+
+build_dir: "/var/tmp/zeropkg/build"
+sandbox_dir: "/opt/zeropkg/sandbox"
+cache_dir: "/var/cache/zeropkg/distfiles"
+repo_dir: "/usr/ports/zeropkg"
+db_dir: "/var/lib/zeropkg/db"
+logs_dir: "/var/log/zeropkg"
+path_env: "/usr/local/bin:/usr/bin:/bin:/opt/zeropkg/toolchains/bin"
+notify: true
+
+/usr/ports/zeropkg/
+ ├── sys-devel/
+ │    ├── gcc/
+ │    │    ├── gcc-13.2.0.meta.yaml
+ │    │    ├── gcc-13.2.0-pass1.meta.yaml
+ │    │    └── gcc-13.2.0-pass2.meta.yaml
+ │    └── binutils/
+ │         └── binutils-2.41.meta.yaml
+ ├── dev-lang/
+ │    ├── python/
+ │    │    ├── python-3.11.6.meta.yaml
+ │    │    └── python-3.12.0.meta.yaml
+ │    └── rust/
+ │         └── rust-1.72.1.meta.yaml
+ ├── gnome/
+ │    └── gnome-shell-45.meta.yaml
+ └── kde/
+      └── plasma-6.0.meta.yaml
+
+meta.yaml
+
+
+
+
