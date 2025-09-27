@@ -1,41 +1,162 @@
-/etc/zeropkg/               → Configurações globais
-/usr/ports/zeropkg/         → Repositório de metas (meta.yaml)
-/var/zeropkg/               → Estado, banco de dados e logs
-/var/cache/zeropkg/         → Downloads e pacotes compilados
-/var/tmp/zeropkg/           → Diretório temporário de build
-/var/lib/zeropkg/           → Metadados e registros de pacotes instalados
-/opt/zeropkg/               → Sandboxes e toolchains
+# Zeropkg – Roadmap Inicial
 
-build_dir: "/var/tmp/zeropkg/build"
-sandbox_dir: "/opt/zeropkg/sandbox"
-cache_dir: "/var/cache/zeropkg/distfiles"
-repo_dir: "/usr/ports/zeropkg"
-db_dir: "/var/lib/zeropkg/db"
+Este documento descreve a estrutura de diretórios, variáveis e organização do Zeropkg,
+um gerenciador de pacotes source-based inspirado no Portage (Gentoo) e no emerge,
+mas adaptado com config.yaml e suporte moderno.
+
+---------------------------------------------------
+Estrutura de Diretórios
+---------------------------------------------------
+
+/etc/zeropkg/               -> Configurações globais
+/usr/ports/zeropkg/         -> Repositório de metas (meta.yaml)
+/var/zeropkg/               -> Estado, banco de dados e logs
+/var/cache/zeropkg/         -> Downloads e pacotes compilados
+/var/tmp/zeropkg/           -> Diretório temporário de build
+/var/lib/zeropkg/           -> Metadados e registros de pacotes instalados
+/opt/zeropkg/               -> Sandboxes e toolchains
+
+---------------------------------------------------
+Arquivo de Configuração
+---------------------------------------------------
+/etc/zeropkg/config.yaml -> Arquivo de configuração global lido por todos os módulos.
+
+Exemplo:
+root: "/"
+eprefix: ""
+sysroot: "/opt/zeropkg/sandbox"
+distdir: "/var/cache/zeropkg/distfiles"
+pkgdir: "/var/cache/zeropkg/packages"
+workdir: "/var/tmp/zeropkg/build"
 logs_dir: "/var/log/zeropkg"
-path_env: "/usr/local/bin:/usr/bin:/bin:/opt/zeropkg/toolchains/bin"
+repo_dir: "/usr/ports/zeropkg"
 notify: true
+fetchcmd: "curl -L -O"
+path_env: "/usr/local/bin:/usr/bin:/bin:/opt/zeropkg/toolchains/bin:/opt/zeropkg/python/bin:/opt/zeropkg/java/bin"
+
+---------------------------------------------------
+Estrutura do Repositório (/usr/ports/zeropkg/<categoria>/<programa>)
+---------------------------------------------------
 
 /usr/ports/zeropkg/
  ├── sys-devel/
  │    ├── gcc/
- │    │    ├── gcc-13.2.0.meta.yaml
- │    │    ├── gcc-13.2.0-pass1.meta.yaml
- │    │    └── gcc-13.2.0-pass2.meta.yaml
+ │    │    ├── gcc-13.2.0.meta
+ │    │    ├── gcc-13.2.0-pass1.meta
+ │    │    └── gcc-13.2.0-pass2.meta
+             └── gcc-14.1.0.meta
  │    └── binutils/
- │         └── binutils-2.41.meta.yaml
+ │         └── binutils-2.41.meta
+            └── binutils-3.1.0.meta
  ├── dev-lang/
  │    ├── python/
- │    │    ├── python-3.11.6.meta.yaml
- │    │    └── python-3.12.0.meta.yaml
+ │    │    ├── python-3.11.6.meta
+ │    │    └── python-3.12.0.meta
  │    └── rust/
- │         └── rust-1.72.1.meta.yaml
+ │         └── rust-1.72.1.meta
  ├── gnome/
- │    └── gnome-shell-45.meta.yaml
+ │    └── gnome-shell-45.meta
  └── kde/
-      └── plasma-6.0.meta.yaml
+      └── plasma-6.0.meta
 
-meta.yaml
+---------------------------------------------------
+Exemplo de meta.yaml
+---------------------------------------------------
 
+name: gcc
+version: 13.2.0
+source:
+  - url: https://ftp.gnu.org/gnu/gcc/gcc-13.2.0/gcc-13.2.0.tar.xz
+  - type: tar
+patches:
+  - gcc-13.2.0-fix.patch
+build:
+  system: autotools
+  args: ["--enable-languages=c,c++", "--disable-multilib"]
+dependencies:
+  build:
+    - binutils >=2.40
+  runtime:
+    - glibc >=2.38
+hooks:
+  pre_build: "./scripts/check-env.sh"
+  post_install: "./scripts/test-suite.sh"
 
+---------------------------------------------------
+Estrutura de Trabalho (/var/tmp/zeropkg/)
+------------ ---------------------------------------
 
+/var/tmp/zeropkg/
+ ├── build/                -> Pasta de compilação
+ │    └── gcc-13.2.0/
+ │         ├── src/        -> Fonte extraído
+ │         ├── patches/    -> Patches aplicados
+ │         ├── work/       -> Arquivos intermediários
+ │         └── fakeroot/   -> Instalação temporária
+ └── sandbox/              -> Ambiente isolado de build
 
+---------------------------------------------------
+Cache (/var/cache/zeropkg/)
+---------------------------------------------------
+
+/var/cache/zeropkg/
+ ├── distfiles/            -> Arquivos baixados (tarballs, fontes, etc.)
+ └── packages/             -> Pacotes empacotados prontos
+
+---------------------------------------------------
+Banco de Dados (/var/lib/zeropkg/)
+---------------------------------------------------
+
+/var/lib/zeropkg/
+ ├── db/                   -> Registro de pacotes instalados
+ │    ├── gcc-13.2.0.yaml
+ │    └── python-3.12.0.yaml
+ └── toolchains/           -> Estado e versões de toolchains
+
+---------------------------------------------------
+Logs (/var/log/zeropkg/)
+---------------------------------------------------
+
+/var/log/zeropkg/
+ ├── gcc-13.2.0.log        -> Log completo da build
+ ├── zeropkg-install.log   -> Histórico global de instalações
+ └── zeropkg-tail.log      -> Log colorido em tempo real
+
+---------------------------------------------------
+Variáveis do Zeropkg (equivalentes ao Portage)
+---------------------------------------------------
+
+[Globais]
+$ROOT       -> raiz do sistema alvo (default: /)
+$EPREFIX    -> prefixo customizado (default: vazio)
+$SYSROOT    -> sandbox/toolchain (default: /opt/zeropkg/sandbox)
+
+[Fonte & Cache]
+$DISTDIR    -> diretório de downloads (/var/cache/zeropkg/distfiles)
+$PKGDIR     -> diretório de pacotes (/var/cache/zeropkg/packages)
+$FETCHCMD   -> comando de fetch (ex: wget, curl, git)
+
+[Build]
+$WORKDIR    -> diretório de build (/var/tmp/zeropkg/build/<pacote-versão>)
+$S          -> subdiretório da fonte extraída (/var/tmp/zeropkg/build/<pacote-versão>/src)
+$PATCHDIR   -> diretório de patches (/var/tmp/zeropkg/build/<pacote-versão>/patches)
+$T          -> diretório temporário de trabalho (/var/tmp/zeropkg/build/<pacote-versão>/work)
+$FILESDIR   -> diretório de arquivos auxiliares
+
+[Instalação]
+$D          -> diretório de instalação temporária (fakeroot)
+$ED         -> equivalente a $D$EPREFIX
+$DESTDIR    -> destino final de instalação (default: $ROOT/usr)
+
+[Metadados]
+$PORTDIR    -> repositório de metas (/usr/ports/zeropkg)
+$PKGNAME    -> nome do pacote (ex: gcc)
+$PV         -> versão do pacote (ex: 13.2.0)
+$PF         -> pacote + versão (ex: gcc-13.2.0)
+$CATEGORY   -> categoria do pacote (ex: sys-devel)
+$P          -> pacote + versão simplificado (ex: gcc-13.2.0)
+
+[Logs & Controle]
+$LOGDIR     -> diretório de logs (/var/log/zeropkg)
+$BUILD_LOG  -> log do pacote atual ($LOGDIR/$PF.log)
+$TAIL_LOG   -> log em tempo real ($LOGDIR/zeropkg-tail.log)
