@@ -1,0 +1,46 @@
+Zeropkg - Gerenciamento de Dependências Avançado
+
+---
+
+# Objetivos
+
+O sistema de dependências do `zeropkg` deve oferecer:
+
+1. Ordenação topológica
+   - Resolver a ordem de build a partir do grafo de dependências (DAG).
+   - Garante que os pais sejam compilados antes dos filhos.
+
+2. Reverse dependencies (dependentes reversos)
+   - Consultar quais pacotes dependem de um alvo específico.
+   - Útil quando um pacote-base muda (ex.: glibc), disparando rebuild em todos os dependentes.
+
+3. Ordem profunda (DFS)
+   - Descer recursivamente em todas as dependências até as folhas antes de subir.
+   - Permite rebuild completo e consistente.
+
+4. Suporte a múltiplas versões
+   - Cada pacote pode coexistir em várias versões lado a lado.
+   - Dependências podem escolher versões específicas.
+   - Pacotes são identificados como <nome>@<versão> (ex.: gcc@13.2.0).
+
+5. Separação entre build-time e runtime
+   - Dependências necessárias apenas para compilar (build).
+   - Dependências necessárias em tempo de execução (runtime).
+   - Ambas declaradas separadamente na receita.
+
+6. Gerenciar programas pai e filho
+   - Programa pai = pacote que fornece a dependência.
+   - Programa filho = pacote que consome a dependência.
+   - Gerenciamento bidirecional: pai → filho e filho → pai.
+
+---
+
+# Resumo
+
+O sistema de dependências do zeropkg:
+- Usa ordenação topológica para builds corretos.
+- Mantém reverse dependencies para rebuild de dependentes.
+- Suporta múltiplas versões lado a lado.
+- Distingue dependências de build e runtime.
+- Modela explicitamente pais e filhos no grafo.
+- Fornece comandos CLI para inspeção e rebuild controlado.
