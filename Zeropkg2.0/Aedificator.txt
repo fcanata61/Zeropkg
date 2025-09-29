@@ -1,0 +1,170 @@
+# Projeto Aedificator - Gerenciador Source-Based para LFS
+
+Este documento descreve um projeto conceitual para desenvolver e manter
+um Linux From Scratch completo, com suporte a Xorg, GNOME, KDE, Firefox etc.
+
+=====================================================================
+1. VISÃO GERAL
+=====================================================================
+- Gerenciador de pacotes escrito em Python, totalmente source-based.
+- Focado em reprodutibilidade e isolamento (sandbox).
+- Suporte a múltiplas versões (GCC, Python, Java, etc.).
+- Gerenciamento completo de dependências (topológica, reversa, DFS).
+- Hooks por fase e suporte a scripts externos.
+- Rollback e troca atômica de toolchain.
+- CLI e API públicas para integração.
+
+=====================================================================
+2. ARQUITETURA EM CAMADAS
+=====================================================================
+User / UI (CLI, Web UI, API)
+    ↕
+Coordinator (orquestrador de tarefas)
+    ↕
+Core Engine (ctx, db, scheduler, logger)
+    ↕
+Módulos:
+ - RepoSync
+ - Recipe Parser
+ - Fetcher/Verifier
+ - Extractor/Patcher
+ - Dependency Resolver
+ - Build Engine (sandbox drivers)
+ - Toolchain Manager
+ - Installer / Merger
+ - Uninstaller
+ - Notifier / Monitor
+ - Tests & QA Runner
+    ↕
+Filesystem / System
+
+=====================================================================
+3. LAYOUT DE DIRETÓRIOS
+=====================================================================
+/aedificator/
+  bin/            # binários/CLI
+  repos/          # repositórios de receitas
+  builds/         # diretórios de build
+  prefixes/       # toolchains, bases, sistemas
+  cache/          # downloads
+  manifests/      # manifests por build
+  state.db        # banco de estado (SQLite)
+  logs/           # logs por fase
+  hooks/          # hooks globais
+  config.yaml     # configuração global
+  api.sock        # socket do daemon (opcional)
+
+=====================================================================
+4. LISTA DE FASES (PHASES)
+=====================================================================
+fetch        → baixa fontes
+verify       → checa checksum/GPG
+extract      → descompacta
+prepatch     → antes de aplicar patches
+patch        → aplicar patches
+postpatch    → depois dos patches
+preconfigure → preparar ambiente
+configure    → configurar build
+postconfigure→ ajustes após configure
+prebuild     → scripts antes da compilação
+build        → compilar
+postbuild    → pós-compilação
+check        → rodar testes
+postcheck    → processar logs de teste
+preinstall   → preparar staging
+install      → instalar em DESTDIR
+postinstall  → ajustes após instalação
+merge        → mover staging → prefixo
+finalize     → atualizar caches globais
+preremove    → antes de remover pacote
+remove       → desinstalar arquivos
+postremove   → limpeza pós-remoção
+upgrade      → fluxo de atualização
+
+=====================================================================
+5. EXEMPLO DE RECIPE (TOML)
+=====================================================================
+[metadata]
+name = "libexample"
+version = "1.2.3"
+summary = "Exemplo de biblioteca"
+
+[sources]
+urls = ["https://example.org/libexample-1.2.3.tar.xz"]
+sha256 = ["sha256:AAAAAAAA..."]
+
+[dependencies]
+build = ["gcc@13.2.0"]
+runtime = ["zlib@1.3.0"]
+
+[phases]
+phases = ["fetch","extract","configure","build","check","install"]
+
+[hooks]
+preconfigure = "scripts/preconf.sh"
+postinstall = "scripts/postinstall.sh"
+
+[build]
+configure_flags = ["--prefix=@PREFIX@", "--enable-shared"]
+env = { CFLAGS = "-O2 -g" }
+jobs = 8
+
+=====================================================================
+6. ALGORITMOS PRINCIPAIS
+=====================================================================
+
+TOPOLOGICAL SORT (Kahn):
+function topo_sort(G):
+  L = []
+  S = {n | indegree(n) == 0}
+  while S not empty:
+    n = pop(S)
+    L.append(n)
+    for m in children(n):
+      remove edge n->m
+      if indegree(m) == 0:
+        S.add(m)
+  if graph has edges:
+    error "cycle detected"
+  return L
+
+REVERSE DEPS:
+function collect_rdeps(graph, target):
+  result = set()
+  queue = [target]
+  while queue:
+    cur = queue.pop()
+    for parent in graph.reverse_neighbors(cur):
+      if parent not in result:
+        result.add(parent)
+        queue.append(parent)
+  return result
+
+=====================================================================
+7. CLI EXEMPLOS
+=====================================================================
+aed fetch pkg@1.2.3
+aed build pkg@1.2.3
+aed install pkg@1.2.3
+aed remove pkg@1.2.3
+aed toolchain install gcc@13.2
+aed toolchain select gcc@13.2
+aed deps pkg@1.2.3
+aed rdeps pkg@1.2.3
+aed sync
+aed rollback prefix@timestamp
+
+=====================================================================
+8. PLANO DE IMPLEMENTAÇÃO
+=====================================================================
+1. MVP: parser, fetcher, build simples.
+2. Resolver de dependências + multi-versão.
+3. Sandbox avançado + toolchain manager.
+4. Rebuilds, rollback, binary cache, CI e testes.
+
+=====================================================================
+9. OBSERVAÇÕES
+=====================================================================
+- APIs devem ser estáveis e documentadas.
+- Segurança via sandbox e verificação de integridade.
+- Construção incremental (MVP → avançado).
