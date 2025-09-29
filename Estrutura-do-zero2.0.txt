@@ -1,0 +1,176 @@
+Zeropkg - Estrutura de Gerenciador de Programas Source Base Linux
+
+---
+
+# Estrutura de Diretórios Proposta
+
+/usr/ports/zeropkg/base
+|               |     ├─ gcc/
+|               |          ├─ gcc-12.2.0-pass1.yaml
+|                          ├─ gcc-12.2.0.yaml
+|                          ├─  gcc-13.2.0.yaml
+│   │   │                └─ patch/
+                                ├─ gcc-fix-bug.patch
+                          └─ hooks/
+                                ├─ pre_patch.sh
+│   │   │                     ├─ post_patch.sh
+│   │   │                     ├─ pre_compile.sh
+│   │   │                     ├─ post_compile.sh
+│   │   │                     ├─ pre_install.sh
+│   │   │                     ├─ post_install.sh
+                                ├─ pre_remove.sh
+                                ├─ post_remove.sh
+│   │   │   └─ python/
+│   │             └─ python-3.12.0.yaml
+│                  └─ python-4.1.0.yaml
+│       
+├─ builds/                    # Builds isolados (sandbox)
+│   ├─ bootstrap/
+│   ├─ toolchain/
+│   └─ system/
+├─ logs/                      # Logs coloridos por pacote
+│   ├─ gcc-13.2.0.log
+│   └─ python-3.12.0.log
+├─ env/                       # Perfis de environment
+│   ├─ bootstrap.sh
+│   ├─ toolchain.sh
+│   └─ system.sh
+├─ bin/                       # Scripts CLI principais
+│   ├─ zeropkg
+│   ├─ zeropkg-toolchain
+│   ├─ zeropkg-python
+│   └─ zeropkg-rebuild
+├─ tmp/                       # Downloads, extrações temporárias
+│   ├─ src/
+│   └─ patches/
+├─ cache/                     # Pacotes e downloads
+└─ state/                     # Estado do sistema, versões instaladas, histórico
+├─ installed.json
+├─ updates.json
+└─ notifications.json
+
+---
+
+# Variáveis de Ambiente Essenciais
+
+export ZEROPKG_ROOT=/zeropkg
+export ZEROPKG_REPOS=$ZEROPKG_ROOT/repos
+export ZEROPKG_BUILDS=$ZEROPKG_ROOT/builds
+export ZEROPKG_LOGS=$ZEROPKG_ROOT/logs
+export ZEROPKG_TMP=$ZEROPKG_ROOT/tmp
+export ZEROPKG_CACHE=$ZEROPKG_ROOT/cache
+export ZEROPKG_STATE=$ZEROPKG_ROOT/state
+export PATH=$ZEROPKG_ROOT/bin:$PATH
+export MAKEFLAGS="-j$(nproc)"
+export LC_ALL=POSIX
+export LANG=C
+
+# Perfis de PATH
+
+# Toolchain: PATH primeiro para $ZEROPKG_BUILDS/toolchain/bin
+
+# System: PATH inclui $ZEROPKG_BUILDS/system/bin + /usr/local/bin
+
+---
+
+# Estrutura de Receita Exemplo (recipe.toml)
+
+[metadata]
+name = "gcc"
+version = "13.2.0"
+source = [
+"[https://ftp.gnu.org/gnu/gcc/gcc-13.2.0/gcc-13.2.0.tar.xz](https://ftp.gnu.org/gnu/gcc/gcc-13.2.0/gcc-13.2.0.tar.xz)",
+"[https://ftp.gnu.org/gnu/gcc/gcc-13.2.0/gcc-13.2.0.tar.gz](https://ftp.gnu.org/gnu/gcc/gcc-13.2.0/gcc-13.2.0.tar.gz)"
+]
+checksums = ["sha256:abcd...", "sha256:efgh..."]
+dependencies = ["binutils-2.40.0", "glibc-2.38.0"]
+phase = ["bootstrap","toolchain","system"]
+
+[patches]
+prepatch = ["fix-build.patch"]
+postpatch = []
+
+[hooks]
+precompile = "precompile.sh"
+postcompile = "postcompile.sh"
+preinstall = "preinstall.sh"
+postinstall = "postinstall.sh"
+preuninstall = "preuninstall.sh"
+postuninstall = "postuninstall.sh"
+
+[build]
+configure_flags = ["--enable-languages=c,c++"]
+environment = {
+CFLAGS="-O2 -g",
+CXXFLAGS="-O2 -g"
+}
+
+---
+
+# Funcionalidades Principais
+
+1. Build Sandbox
+
+   * Cada pacote constrói dentro de builds/<fase>/<pacote-version>/
+   * Usa fakeroot para instalação fake antes do merge final
+   * Hooks pré/pós: patch, compile, install, remove
+
+2. Múltiplas versões
+
+   * Cada programa pode ter várias versões side-by-side
+   * Separação entre base/toolchain/system
+
+3. Download e Patch
+
+   * Múltiplos downloads e patches por receita
+   * Extração automática: .tar.gz, .tar.bz2, .tar.xz, .zip, .7z
+
+4. Registro e Logging
+
+   * Logs coloridos em logs/<pacote>.log com opção tail -f
+   * Histórico em state/installed.json
+   * Notificações para barra (crítico/urgente/normal)
+
+5. Atualizações
+
+   * Sincroniza repositórios via Git
+   * Atualiza receitas e gera nova versão copiando a antiga
+
+6. CLI
+
+   * Comandos abreviados e combinados: zeropkg -bi, zeropkg -bd
+   * Ferramentas específicas: zeropkg-toolchain, zeropkg-python, zeropkg-rebuild
+
+7. Gerenciamento de Dependências
+
+   * Declaração de dependências nas receitas
+   * Ordenação topológica para builds
+   * Recompilação total do sistema (zeropkg-rebuild @all)
+
+---
+
+# Extras
+
+* Logs coloridos: sucesso verde, warning amarelo, erro vermelho
+* Hooks inline: scripts dentro da pasta do pacote
+* Environment customizado por receita: CFLAGS, PATH, LD_LIBRARY_PATH
+* Multi-download com fallback
+* Notificações centralizadas: crítico/urgente/normal
+* Histórico de versões e atualizações em JSON
+
+---
+
+# Resumo
+
+Este plano fornece:
+
+* Estrutura de diretórios para repositórios, builds, logs, environment, binários, cache e estado
+* Perfis de environment por fase (bootstrap, toolchain, system)
+* Receitas declarativas com múltiplos downloads, patches e hooks
+* Sandbox/fakeroot para builds isolados
+* Gerenciamento de múltiplas versões de programas e toolchains
+* CLI poderosa com comandos combinados, rebuild seletivo e set/list
+* Registro completo de logs e histórico de updates
+* Notificações e monitoramento em tempo real
+
+Este esquema pode ser implementado como base para o gerenciador de pacotes zeropkg.
