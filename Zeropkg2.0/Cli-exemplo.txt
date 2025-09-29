@@ -1,0 +1,13 @@
+aed fetch pkg@1.2.3             # fetch only
+aed build pkg@1.2.3             # build only (in sandbox)
+aed install pkg@1.2.3           # build+install
+aed rebuild pkg@1.2.3 --deep    # rebuild and its rdeps
+aed remove pkg@1.2.3            # remove (checks rdeps)
+aed toolchain install gcc@13.2
+aed toolchain select gcc@13.2
+aed deps pkg@1.2.3              # list deps
+aed rdeps pkg@1.2.3             # list reverse deps
+aed sync                         # sync repos
+aed status                       # queue, running, last failures
+aed tail pkg@1.2.3               # tail logs
+aed rollback prefix@timestamp    # rollback
