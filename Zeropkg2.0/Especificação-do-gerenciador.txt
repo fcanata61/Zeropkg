@@ -1,0 +1,183 @@
+ZeroPkg - Especificação Completa: Gerenciador Source-Based para LFS (Python)
+===========================================================================
+
+Resumo
+------
+Documento de especificação para um gerenciador de pacotes source-based chamado 'zeropkg'.
+Inclui estrutura de diretórios, módulos necessários, formato de receitas, fluxo de build,
+gestão de toolchains, sandboxing, controle de dependências (topological/reverse/DFS),
+suporte a múltiplas versões, integração com libtool/pkg-config/rpath, atualização e rollback,
+e requisitos para gerenciar Xorg, GNOME, KDE, systemd, Firefox, Chromium e mais.
+
+Layout de diretórios
+--------------------
+/zeropkg/
+  bin/                 # CLI scripts
+  repos/               # recipe git repositories
+  manifests/           # manifests generated per build
+  builds/              # staged build dirs (bootstrap/toolchain/system)
+  toolchains/          # installed toolchains (gcc@13.2.0, clang@17...)
+  cache/               # downloads and patches
+  tmp/                 # extraction and staging
+  logs/                # per-package logs
+  state/               # installed.json, rdeps_index.json
+  etc/                 # zeropkg.conf, profiles
+  lib/                 # python modules of zeropkg
+
+Variáveis de ambiente exemplo
+----------------------------
+ZEROPKG_ROOT=/zeropkg
+ZEROPKG_REPOS=$ZEROPKG_ROOT/repos
+ZEROPKG_BUILDS=$ZEROPKG_ROOT/builds
+ZEROPKG_TOOLCHAINS=$ZEROPKG_ROOT/toolchains
+ZEROPKG_CACHE=$ZEROPKG_ROOT/cache
+ZEROPKG_LOGS=$ZEROPKG_ROOT/logs
+ZEROPKG_STATE=$ZEROPKG_ROOT/state
+ZEROPKG_TMP=$ZEROPKG_ROOT/tmp
+PATH=$ZEROPKG_ROOT/bin:$PATH
+MAKEFLAGS="-j$(nproc)"
+LC_ALL=POSIX
+LANG=C
+
+Principais módulos (em Python)
+------------------------------
+1) cli            - entrypoint e parsing de comandos (install, rebuild, toolchain, sync)
+2) config         - parse zeropkg.conf e profiles
+3) repo           - git sync, mirrors, verificação
+4) recipe         - parser de recipe.toml/yaml, validação schema
+5) fetch          - download e checksum (support mirrors, gpg verify)
+6) extract        - extrair múltiplos formatos e aplicar patches
+7) build          - engine de build (drivers: fakeroot/chroot/container)
+8) deps           - gerenciador de grafo de deps (topo, rdeps, DFS, cycle detect)
+9) toolchain      - instalar/remover/selecionar/reparar/rebuild toolchains
+10) install       - merge staged -> prefix, preserve xattrs, backups
+11) uninstall     - remove seguro com checagem de dependentes
+12) db            - state persistence (JSON/SQLite), manifests, transaction journal
+13) hooks         - execução sandboxed de hooks por fase
+14) logger        - logs coloridos, per-phase files, tail streaming
+15) notify        - notification aggregator (critical/urgent/normal)
+16) daemon/api    - opcional: HTTP/unix-socket para UI e remote control
+17) utils         - helpers: checksum, atomic moves, readelf wrappers
+
+Formato de receita (exemplo resumido)
+------------------------------------
+[metadata]
+name = "pkg"
+version = "1.2.3"
+
+[source]
+urls = ["https://example.org/pkg-1.2.3.tar.xz"]
+sha256 = ["..."]
+
+[dependencies]
+build = ["binutils@2.40.0"]
+runtime = ["libc@2.38"]
+
+[phases]
+phases = ["fetch","extract","prepatch","patch","configure","build","check","install","postinstall"]
+
+[build]
+configure_flags = ["--prefix=@PREFIX@"]
+env = { CFLAGS="-O2 -g" }
+jobs = 8
+
+Fluxo de Build (phases)
+-----------------------
+fetch -> verify -> extract -> prepatch -> patch -> preconfigure -> configure -> build -> check -> install -> postinstall -> package -> merge
+Logs por fase em logs/<pkg>/<phase>.log
+
+Gerenciamento de dependências
+----------------------------
+- Nodes: name@version
+- Edges: tipo build/runtime/optional/peer
+- Algoritmos: Kahn topological sort, DFS para deep rebuild, reverse traversal para rdeps
+- Detectar ciclos e rejeitar ou alertar
+- Permitir constraints: exact, ranges, latest alias
+
+Toolchain & Bootstrap
+---------------------
+- Prefix model: /opt/zeropkg/toolchains/<id> (id = gcc@13.2.0)
+- Manifest.json por toolchain
+- Wrappers CC/CXX/AR/RANLIB, PKG_CONFIG_PATH, LD_LIBRARY_PATH
+- Select atômico via symlink /etc/zeropkg/toolchains/active -> prefix
+- Repair checks: binaries, pkgconfig, rpath, sonames
+- Rebuild set in order: binutils -> gcc -> glibc
+- Integrar libtoolize e libltdl dentro do processo
+
+Sandboxing
+----------
+- Drivers: fakeroot, chroot, bubblewrap, podman
+- Mount tmpfs, bind-mount cache, optional network
+- Clean env for reproducibility
+
+Multi-versões e Namespace
+------------------------
+- Side-by-side prefixes for multi-versions
+- Language runtime selectors: zeropkg-python set 3.12.0
+- Virtual provides and capability based deps
+
+Libtool, pkg-config, rpath, sysroot
+-----------------------------------
+- Run libtoolize/autoreconf in preconfigure
+- Ensure .pc files use @PREFIX@
+- Use -Wl,-rpath or --enable-new-dtags for correct RUNPATH
+- Validate with readelf/ldd
+
+Stacks pesados (Xorg, Systemd, GNOME, KDE, Browsers)
+--------------------------------------------------
+- Recomendações: profiles (@x11, @desktop-gnome, @desktop-kde)
+- Build groups: core libs -> GUI libs -> desktops
+- Heavy caching and binary cache for browsers
+
+Sync, updates e rollback
+-----------------------
+- zeropkg sync : git pull recipes
+- Bump tool: duplicate recipe dir para nova versão
+- Staged upgrades: build new versions alongside installed and switch atomic
+- Rollback: backup prefixes, restore manifest
+
+Logging & UI
+-----------
+- logs/<pkg>/<phase>.log
+- operations journal (JSON)
+- zeropkg tail <pkg> for real-time
+- notifier for counts (critical/urgent/normal)
+
+Security & Integrity
+-------------------
+- checksums, GPG signatures, sandbox builds
+- minimal privileged operations
+
+Rebuild whole system
+--------------------
+- Compute DAG for target set (e.g., @base) and run topological build order
+- Parallelize independent subgraphs for speed
+- Provide selective rebuilds (profiles, --changed, --deep)
+
+Checklist de implementação (MVP -> Avançado)
+-------------------------------------------
+MVP:
+ - scaffolding, cli, recipe parser, fetch+extract, basic build engine, installer, state db, logging
+Core:
+ - sandbox drivers, rdeps index, multi-version toolchains, toolchain manager, hooks
+Advanced:
+ - daemon/API, web UI, binary cache, optimized graph builds, security hardening
+
+Examples de CLI
+---------------
+zeropkg install gcc@13.2.0
+zeropkg -bi python@3.12.0
+zeropkg rebuild @base
+zeropkg toolchain select gcc@13.2.0
+zeropkg deps firefox
+zeropkg rdeps glibc
+zeropkg sync
+
+Recomendações finais
+-------------------
+- começar pequeno e iterar
+- priorizar rollback e logs
+- testar com stacks reais: gcc->glibc->python->xorg->gnome
+- considerar portar partes críticas para Rust/Go no futuro para performance
+
+Fim do arquivo
