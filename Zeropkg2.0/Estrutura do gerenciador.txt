@@ -1,0 +1,123 @@
+Gerenciador Source-Based Linux - Arquitetura Completa
+====================================================
+
+Resumo
+------
+Este documento descreve a arquitetura de um gerenciador source-based para LFS,
+capaz de construir, manter e atualizar um sistema Linux completo, incluindo
+toolchains, Xorg, desktops GNOME/KDE e aplicações pesadas como Firefox e Chromium.
+
+1. Estrutura de Pastas
+----------------------
+/lfs-manager/
+  bin/                  # Scripts CLI
+  core/                 # Engine principal e context
+  recipes/              # Receitas de pacotes (TOML/YAML/JSON)
+  builds/               # Staging das builds (bootstrap/toolchain/system/apps)
+  toolchains/           # Prefixes isolados de toolchains (gcc@13.2, clang@17)
+  logs/                 # Logs por pacote e fase
+  cache/                # Downloads e patches
+  tmp/                  # Arquivos temporários de extração/build
+  state/                # Banco de dados do estado do sistema (JSON/SQLite)
+  hooks/                # Hooks globais ou específicos de pacote
+  etc/                  # Configurações, profiles
+  utils/                # Funções auxiliares gerais
+  api/                  # Opcional: interface REST ou IPC para automação
+
+2. Módulos principais
+---------------------
+1) core
+   - Gerencia contexto global, paths, env, logger, db
+   - Fornece API pública estável para outros módulos
+   - Context object para compartilhar config/env
+
+2) recipes
+   - Parser de receitas (TOML/YAML/JSON)
+   - Validação de schema e compatibilidade
+   - Define fases, dependências, patches, downloads múltiplos
+   - Multi-versão e multi-download support
+
+3) build
+   - Engine de build sandboxed
+   - Fases: fetch, extract, prepatch, patch, configure, build, check, install, postinstall
+   - Suporte a múltiplos backends: fakeroot, chroot, bubblewrap, container
+   - Logging detalhado por fase
+   - Enforce env reproducibility (CFLAGS, PKG_CONFIG_PATH, LD_LIBRARY_PATH)
+
+4) deps
+   - Grafo de dependências (build/runtime/optional/peer)
+   - Algoritmos: topological sort, DFS para deep rebuild, reverse traversal
+   - Detecta ciclos e permite rebuild seletivo ou completo
+   - Multi-versão support
+
+5) toolchain
+   - Instala, remove, seleciona, repara, rebuild toolchains isoladas
+   - Wrappers CC/CXX/AR/RANLIB, PKG_CONFIG_PATH, LD_LIBRARY_PATH
+   - Integrado com libtool, pkg-config, sysroot
+   - Build order: binutils -> gcc -> glibc -> runtimes
+
+6) install
+   - Merge staged build para prefix seguro
+   - Backup de instalações anteriores
+   - Suporte a múltiplas versões side-by-side
+
+7) uninstall
+   - Remove pacote checando dependentes
+   - Mantém integridade do sistema e rollback seguro
+
+8) logger
+   - Logs coloridos, tail -f, logs por pacote/fase
+   - Journaling de operações (JSON)
+
+9) notify
+   - Resumo de updates: crítico/urgente/normal
+   - Notificações para CLI ou API
+
+10) sync
+   - Sincroniza repositórios Git de receitas
+   - Gera manifests e metadados
+   - Permite update incremental ou rebuild completo
+
+11) hooks
+   - Execução de hooks por fase: pre_fetch, post_fetch, pre_build, post_install
+   - Permite customizações inline por pacote
+   - Mantém compatibilidade com API estável
+
+12) utils
+   - Helpers: checksum, atomic moves, readelf wrappers, path utils
+
+13) api (opcional)
+   - Interface REST ou IPC para integração com scripts, UI ou CI/CD
+
+3. Estratégia de Construção
+---------------------------
+- Bootstrap minimal toolchain e core utils
+- Toolchain: GCC, Clang, binutils, libc
+- Base system: libs essenciais, init (systemd)
+- Desktop stack: Xorg, libX, drivers, GNOME, KDE
+- Aplicações pesadas: browsers, IDEs, editors
+- Prefixes isolados para multi-versão
+- Env separado por build/runtime
+- Hooks e sandboxing para reproducibility
+
+4. Funcionalidades avançadas
+----------------------------
+- Multi-build e paralelismo por DAG de dependências
+- Rebuild seletivo ou completo (@base, @desktop, pacote específico)
+- Rollback atômico de prefixos
+- Multi-versão de runtimes (Python, Ruby, Java)
+- Patch automático e múltiplos downloads por receita
+- Logs detalhados e tail -f
+- Notificações de atualizações e status
+- Sync de receitas via Git
+- Controle de integridade (checksum, GPG, sandbox)
+
+5. Princípios chaves
+-------------------
+- Isolar cada build em sandbox para segurança e reproducibility
+- Versionar toolchains e runtimes em prefixes isolados
+- API pública estável entre módulos
+- Hooks e plugins para customizações sem alterar core
+- Logging, rollback e testes automatizados para confiabilidade
+
+Fim do documento
