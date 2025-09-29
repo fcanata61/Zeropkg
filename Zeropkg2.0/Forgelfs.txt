@@ -1,0 +1,78 @@
+ForgeLFS - Gerenciador Source-Based Linux Completo
+==================================================
+
+Resumo
+------
+Gerenciador para construir, manter e atualizar um sistema LFS completo,
+incluindo toolchains, desktops (Xorg, GNOME, KDE) e aplicações pesadas (Firefox, Chromium).
+
+1. Estrutura de Pastas
+----------------------
+/forge-lfs/
+  bin/              # Scripts CLI
+  core/             # Engine central e context
+  recipes/          # Receitas de pacotes (TOML/YAML/JSON)
+  builds/           # Build staging por fase e pacote
+  toolchains/       # Prefixes isolados: gcc@13.2, glibc@2.38...
+  runtimes/         # Python, Ruby, Java side-by-side
+  cache/            # Downloads, patches
+  tmp/              # Extração e compilação temporária
+  logs/             # Logs por pacote e fase
+  state/            # DB JSON/SQLite do estado do sistema
+  hooks/            # Hooks globais ou específicos por pacote
+  utils/            # Helpers gerais
+  api/              # Opcional REST/IPC interface
+  profiles/         # Perfis de sistema: @base, @desktop, @browser
+  manifests/        # Snapshot de builds, versões, hashes
+
+2. Módulos principais
+---------------------
+core: Contexto global (ForgeContext), paths, env, logger, db, API pública estável  
+recipes: Parser e validador de receitas, multi-download, patches, multi-versão  
+build: Engine sandboxed, fases completas, logging detalhado, env limpo  
+deps: Grafo de dependências, topo-sort, DFS, reverse rdeps, multi-versão  
+toolchain: Instalação, seleção, rebuild, wrappers CC/CXX, integração libtool/pkg-config/sysroot  
+runtimes: Multi-versão Python/Ruby/Java, hooks de compilação/instalação  
+install/uninstall: Merge seguro, backup, dependentes, rollback atomic  
+logging: Logs coloridos, tail -f, journaling JSON  
+sync: Sincronização de repositórios Git, manifests de versão e hash  
+hooks: Execução inline pre/post fases, plugins sem tocar core  
+api: CLI + REST/IPC para UI, scripts e CI/CD  
+utils: Helpers gerais (checksum, atomic moves, readelf wrappers, path utils)  
+
+3. Fluxo de Build
+-----------------
+Resolver dependências -> fetch -> extract -> patch -> configure -> build -> check -> install -> postinstall -> registrar manifest/logs/estado  
+
+4. Estratégia de construção do sistema
+--------------------------------------
+Bootstrap: core utils + toolchain base  
+Toolchain: GCC -> binutils -> glibc  
+Base System: libs essenciais + init system  
+Desktop Stack: Xorg -> libX -> drivers -> GNOME/KDE  
+Aplicações pesadas: Browsers, IDEs, Editors  
+Prefixes isolados para múltiplas versões  
+Env separado (CFLAGS, LDFLAGS, PKG_CONFIG_PATH)  
+
+5. Funcionalidades avançadas
+----------------------------
+- Multi-build com DAG  
+- Rebuild seletivo ou completo (@base, @desktop, pacote específico)  
+- Rollback atomic de builds  
+- Multi-versão de runtimes  
+- Patch automático e múltiplos downloads por receita  
+- Logs detalhados e tail -f  
+- Notificação de updates  
+- Sync de receitas via Git  
+- Integridade e segurança (checksums, GPG, sandbox)  
+
+6. Princípios-chave de desenvolvimento
+-------------------------------------
+- Isolamento de builds para segurança e reproducibility  
+- API pública estável entre módulos  
+- Hooks e plugins para extensibilidade  
+- Versionamento de toolchains e runtimes  
+- Logging detalhado, rollback e testes automáticos  
+- Separação clara de camadas: bootstrap -> toolchain -> base -> desktop -> apps  
+
+Fim do documento
