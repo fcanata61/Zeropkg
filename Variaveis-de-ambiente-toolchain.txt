@@ -1,0 +1,15 @@
+export TOOLCHAIN_ROOT=/opt/zeropkg-toolchains
+export TOOLCHAIN=gcc@13.2.0
+export TOOLCHAIN_PREFIX=$TOOLCHAIN_ROOT/$TOOLCHAIN
+export PATH="$TOOLCHAIN_PREFIX/bin:$PATH"
+export LD_LIBRARY_PATH="$TOOLCHAIN_PREFIX/lib:$TOOLCHAIN_PREFIX/lib64:$LD_LIBRARY_PATH"
+export PKG_CONFIG_PATH="$TOOLCHAIN_PREFIX/lib/pkgconfig:$TOOLCHAIN_PREFIX/share/pkgconfig:$PKG_CONFIG_PATH"
+export CC="$TOOLCHAIN_PREFIX/bin/gcc"
+export CXX="$TOOLCHAIN_PREFIX/bin/g++"
+export AR="$TOOLCHAIN_PREFIX/bin/ar"
+export RANLIB="$TOOLCHAIN_PREFIX/bin/ranlib"
+export STRIP="$TOOLCHAIN_PREFIX/bin/strip"
+export SYSROOT="$TOOLCHAIN_PREFIX/$SYSROOT"   # opcional
+# Libtool related
+export LIBTOOL="$TOOLCHAIN_PREFIX/bin/libtool"
+export LTFLAGS="--tag=CC"  # exemplo
