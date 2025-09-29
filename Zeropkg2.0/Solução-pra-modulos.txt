@@ -1,0 +1,9 @@
+Você pode pedir pro ChatGPT assim:
+
+> "Quero que cada módulo seja criado com uma API pública estável,
+recebendo sempre um ZeropkgContext e retornando dados em JSON/TOML 
+padronizados, para evitar retrabalho de compatibilidade quando eu evoluir 
+ou adicionar novos módulos."
+
+Assim, cada vez que você me pedir um novo módulo, eu gero já compatível com 
+o contrato, e você não precisa editar os antigos.
