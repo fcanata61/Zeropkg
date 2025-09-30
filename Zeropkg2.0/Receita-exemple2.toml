@@ -1,0 +1,96 @@
+[metadata]
+name = "megaapp"
+version = "5.4.2"
+summary = "Aplicação de exemplo para demonstrar todas as features da recipe"
+homepage = "https://megaapp.example.org/"
+license = "GPL-3.0-or-later"
+
+[sources]
+urls = [
+  "https://downloads.example.org/megaapp-5.4.2.tar.xz",
+  "https://mirror.example.org/megaapp-data-5.4.2.zip"
+]
+sha256 = [
+  "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+  "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+]
+patches = [
+  "patches/fix-build.patch",
+  "patches/add-systemd-support.patch"
+]
+
+[dependencies]
+build = [
+  "gcc@13.2.0",
+  "make",
+  "pkg-config",
+  "cmake@3.28",
+  "ninja@1.12",
+  "python@3.11",
+  "gettext"
+]
+runtime = [
+  "glibc",
+  "openssl",
+  "zlib",
+  "freetype",
+  "harfbuzz",
+  "gtk@3",
+  "systemd"
+]
+optional = [
+  "wayland",
+  "pipewire"
+]
+
+[phases]
+phases = [
+  "fetch","verify","extract",
+  "prepatch","patch","postpatch",
+  "preconfigure","configure","postconfigure",
+  "prebuild","build","postbuild",
+  "check","postcheck",
+  "preinstall","install","postinstall",
+  "merge","finalize"
+]
+
+[build]
+system = "cmake+ninja"
+configure_flags = [
+  "-DCMAKE_BUILD_TYPE=Release",
+  "-DCMAKE_INSTALL_PREFIX=@PREFIX@",
+  "-DENABLE_SYSTEMD=ON",
+  "-DENABLE_WAYLAND=OFF"
+]
+env = {
+  "CC" = "gcc",
+  "CXX" = "g++",
+  "AR" = "ar",
+  "LD" = "ld",
+  "CFLAGS" = "-O2 -pipe -fPIC",
+  "CXXFLAGS" = "-O2 -pipe -fPIC -std=c++20",
+  "LDFLAGS" = "-Wl,-O1 -Wl,--as-needed",
+  "PATH" = "/usr/local/bin:/usr/bin:/bin:@TOOLCHAIN@/bin"
+}
+jobs = 8
+
+[hooks]
+preconfigure = "scripts/preconf.sh"
+postconfigure = "scripts/postconf.sh"
+prebuild = "scripts/prebuild.sh"
+postbuild = "scripts/postbuild.sh"
+preinstall = "scripts/preinstall.sh"
+postinstall = "scripts/postinstall.sh"
+preremove = "scripts/preremove.sh"
+postremove = "scripts/postremove.sh"
+
+[tests]
+enabled = true
+command = "ctest --output-on-failure -j 8"
+postcheck = "scripts/process-tests.sh"
+
+[logging]
+color = true
+save_logs = true
+log_dir = "@LOGDIR@/megaapp"
+tail_follow = true
