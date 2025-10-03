@@ -1,0 +1,65 @@
+Quero que você crie um projeto completo em Python, modularizado, que funcione como um gerenciador de pacotes *simplificado* (não precisa ser Portage ou Nix).  
+O objetivo é ter um ciclo funcional mínimo: ler metadados de pacotes em TOML, preparar um sandbox, simular a construção (build), empacotar em .tar.gz e instalar em um diretório de destino.  
+
+## REGRAS IMPORTANTES
+1. Entregue **arquivos completos de código**, não apenas comentários ou fragmentos.  
+2. O projeto deve estar organizado em **módulos separados** dentro de uma pasta `src/`.  
+3. Deve haver um **arquivo principal `main.py`** que coordena tudo.  
+4. Todo módulo deve conter funções implementadas, não apenas stubs.  
+5. Use apenas bibliotecas padrão do Python:  
+   - `os`  
+   - `subprocess`  
+   - `tarfile`  
+   - `shutil`  
+   - `tomllib` (ou `toml` caso versão do Python <3.11)  
+6. O sistema deve ser **funcional de ponta a ponta**: ao rodar `python main.py package.toml`, o processo deve:  
+   - Ler o pacote do TOML.  
+   - Criar diretórios de sandbox (`build/`, `destdir/`, etc.).  
+   - Simular um build (`echo "compilando..."` usando `subprocess`).  
+   - Criar um `.tar.gz` do pacote.  
+   - Instalar o pacote em `rootfs/`.  
+
+---
+
+## ESTRUTURA DO PROJETO
+
+gerenciador/ ├── src/ │   ├── init.py │   ├── core.py        # Funções principais: carregar pacotes, logging, variáveis expansíveis │   ├── sandbox.py     # Criar e gerenciar sandbox │   ├── builder.py     # Simular processo de build │   ├── packager.py    # Empacotar em .tar.gz │   ├── installer.py   # Instalar no diretório rootfs/ │   └── main.py        # Ponto de entrada └── examples/ └── package.toml   # Exemplo de metadados de pacote
+
+---
+
+## CONTEÚDO ESPERADO DOS ARQUIVOS
+
+### `core.py`
+- Função para ler TOML.  
+- Função para expandir variáveis (ex: `${PREFIX}`).  
+- Função para logging básico.  
+
+### `sandbox.py`
+- Função para preparar diretórios temporários (`build/`, `destdir/`).  
+
+### `builder.py`
+- Função `build_package(metadata, sandbox_dir)` que simula um build (executa comando do TOML ou `echo "compilando"`).  
+
+### `packager.py`
+- Função `create_tarball(destdir, output_path)` que gera um `.tar.gz`.  
+
+### `installer.py`
+- Função `install_package(tarball, rootfs_dir)` que extrai o pacote no `rootfs/`.  
+
+### `main.py`
+- Parsear argumentos.  
+- Carregar TOML do pacote.  
+- Rodar as funções na ordem correta: sandbox → build → pacote → instalar.  
+
+### `examples/package.toml`
+Exemplo de metadados:  
+```toml
+[package]
+name = "hello"
+version = "1.0"
+source = "https://exemplo.com/hello-1.0.tar.gz"
+build = "echo 'Compilando Hello World...'"
+install = "echo 'Instalando Hello World...'"
+
+---
+Agora, com base nessas instruções, gere todos os arquivos completos do projeto.
